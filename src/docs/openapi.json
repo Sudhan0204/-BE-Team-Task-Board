@@ -1,0 +1,356 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "DevFlow REST API",
+    "description": "Production-grade REST API backend for DevFlow team task management, connecting to PostgreSQL via Knex.js.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "DevFlow Platform Engineering",
+      "email": "support@devflow.app"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter your JWT token obtained from /auth/login or /auth/register"
+      }
+    },
+    "schemas": {
+      "StandardSuccess": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "message": { "type": "string", "example": "Operation completed successfully" },
+          "data": { "type": "object" }
+        }
+      },
+      "StandardError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "message": { "type": "string", "example": "Validation failed" },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": { "type": "string", "example": "email" },
+                "message": { "type": "string", "example": "Invalid email address" }
+              }
+            }
+          }
+        }
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer", "example": 1 },
+          "limit": { "type": "integer", "example": 20 },
+          "total": { "type": "integer", "example": 45 },
+          "totalPages": { "type": "integer", "example": 3 }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "user_id": { "type": "string", "example": "1001" },
+          "full_name": { "type": "string", "example": "Sarah Connor" },
+          "email": { "type": "string", "example": "sarah@devflow.app" },
+          "avatar_url": { "type": "string", "nullable": true, "example": null },
+          "is_active": { "type": "boolean", "example": true },
+          "email_verified": { "type": "boolean", "example": false },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": "string", "example": "501" },
+          "project_id": { "type": "string", "example": "101" },
+          "title": { "type": "string", "example": "Implement OAuth2 Flow" },
+          "description": { "type": "string", "nullable": true, "example": "Support Google Workspace login" },
+          "status": { "type": "string", "enum": ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"], "example": "in_progress" },
+          "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"], "example": "high" },
+          "created_by": { "type": "string", "example": "1001" },
+          "assigned_to": { "type": "string", "nullable": true, "example": "1002" },
+          "due_date": { "type": "string", "format": "date", "nullable": true, "example": "2026-11-01" },
+          "position": { "type": "number", "example": 1000 },
+          "completed_at": { "type": "string", "format": "date-time", "nullable": true, "example": null },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health Check & Database Ping",
+        "tags": ["Health"],
+        "responses": {
+          "200": { "description": "API & PostgreSQL connected" },
+          "503": { "description": "Database connectivity failure" }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new user account",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["full_name", "email", "password"],
+                "properties": {
+                  "full_name": { "type": "string", "example": "Sarah Connor" },
+                  "email": { "type": "string", "example": "sarah@devflow.app" },
+                  "password": { "type": "string", "example": "SecurePassword123!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User created successfully" },
+          "409": { "description": "Email already in use" },
+          "422": { "description": "Validation error" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate user credentials & issue JWT",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "example": "sarah@devflow.app" },
+                  "password": { "type": "string", "example": "SecurePassword123!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login successful" },
+          "401": { "description": "Invalid email or password" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Get authenticated user profile",
+        "tags": ["Authentication"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Current user profile" },
+          "401": { "description": "Unauthenticated" }
+        }
+      }
+    },
+    "/organizations": {
+      "post": {
+        "summary": "Create organization and assign creator as owner",
+        "tags": ["Organizations"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "slug"],
+                "properties": {
+                  "name": { "type": "string", "example": "Acme Technologies" },
+                  "slug": { "type": "string", "example": "acme-tech" },
+                  "description": { "type": "string", "example": "Enterprise platform" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Organization created" },
+          "409": { "description": "Slug already exists" }
+        }
+      },
+      "get": {
+        "summary": "List user's organizations with their assigned role",
+        "tags": ["Organizations"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of organizations" }
+        }
+      }
+    },
+    "/organizations/{organizationId}/projects": {
+      "post": {
+        "summary": "Create project within organization",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "organizationId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "project_key"],
+                "properties": {
+                  "name": { "type": "string", "example": "Core Engine" },
+                  "project_key": { "type": "string", "example": "DEV" },
+                  "description": { "type": "string", "example": "Platform engine" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Project created" },
+          "409": { "description": "Project key already exists in organization" }
+        }
+      },
+      "get": {
+        "summary": "List organization projects (paginated)",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "organizationId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated list of projects" }
+        }
+      }
+    },
+    "/projects/{projectId}/tasks": {
+      "post": {
+        "summary": "Create a new task in project",
+        "tags": ["Tasks"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "projectId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title"],
+                "properties": {
+                  "title": { "type": "string", "example": "Refactor auth controller" },
+                  "description": { "type": "string" },
+                  "status": { "type": "string", "enum": ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] },
+                  "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+                  "assigned_to": { "type": "string" },
+                  "position": { "type": "number", "default": 1000 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Task created" }
+        }
+      },
+      "get": {
+        "summary": "List tasks with filters, search, and pagination",
+        "tags": ["Tasks"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "projectId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "priority", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated task list" }
+        }
+      }
+    },
+    "/projects/{projectId}/board": {
+      "get": {
+        "summary": "Get Kanban board tasks grouped by status columns ordered by position",
+        "tags": ["Tasks", "Kanban"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "projectId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Kanban board columns and tasks" }
+        }
+      }
+    },
+    "/tasks/{taskId}/status": {
+      "patch": {
+        "summary": "Update task status column and trigger completed_at adjustment",
+        "tags": ["Tasks"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "taskId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": { "type": "string", "enum": ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Task status updated" }
+        }
+      }
+    },
+    "/dashboard/summary": {
+      "get": {
+        "summary": "Get workspace summary metrics (projects, assigned tasks, status breakdown, overdue)",
+        "tags": ["Dashboard"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Dashboard summary statistics" }
+        }
+      }
+    },
+    "/dashboard/my-tasks": {
+      "get": {
+        "summary": "Get tasks assigned to authenticated user across all authorized projects",
+        "tags": ["Dashboard"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Assigned tasks list" }
+        }
+      }
+    }
+  }
+}
