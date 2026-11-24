@@ -32,8 +32,8 @@ export class ApiError extends Error {
     return new ApiError(404, message);
   }
 
-  static conflict(message = 'Resource conflict or duplicate entry') {
-    return new ApiError(409, message);
+  static conflict(message = 'Resource conflict or duplicate entry', errors = []) {
+    return new ApiError(409, message, errors);
   }
 
   static unprocessable(message = 'Validation failed', errors = []) {

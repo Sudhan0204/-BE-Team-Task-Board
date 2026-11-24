@@ -1,6 +1,7 @@
 import authService from './auth.service.js';
 import { sendSuccess, sendCreated } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { setAuthCookie, clearAuthCookie } from '../../utils/cookies.js';
 
 export const authController = {
   /**
@@ -8,6 +9,7 @@ export const authController = {
    */
   register: asyncHandler(async (req, res) => {
     const result = await authService.register(req.body);
+    setAuthCookie(res, result.token, { rememberMe: true });
     return sendCreated(res, 'User registered successfully', result);
   }),
 
@@ -16,6 +18,7 @@ export const authController = {
    */
   login: asyncHandler(async (req, res) => {
     const result = await authService.login(req.body);
+    setAuthCookie(res, result.token, { rememberMe: req.body.remember_me !== false });
     return sendSuccess(res, 'Login successful', result);
   }),
 
@@ -23,8 +26,8 @@ export const authController = {
    * POST /api/v1/auth/logout
    */
   logout: asyncHandler(async (req, res) => {
-    // For stateless JWTs, the client clears the token from client-side storage.
-    return sendSuccess(res, 'Logged out successfully. Please discard your authentication token.');
+    clearAuthCookie(res);
+    return sendSuccess(res, 'Logged out successfully.');
   }),
 
   /**

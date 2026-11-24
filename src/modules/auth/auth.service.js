@@ -19,7 +19,7 @@ function hashToken(token) {
 /**
  * Generates a signed JWT access token containing safe user identity claims
  */
-function generateToken(user) {
+function generateToken(user, expiresIn = env.JWT_EXPIRES_IN) {
   return jwt.sign(
     {
       sub: String(user.user_id),
@@ -27,7 +27,7 @@ function generateToken(user) {
     },
     env.JWT_SECRET,
     {
-      expiresIn: env.JWT_EXPIRES_IN,
+      expiresIn,
     }
   );
 }
@@ -69,7 +69,7 @@ export const authService = {
   /**
    * Authenticates user credentials with enumeration-resistant timing
    */
-  async login({ email, password }) {
+  async login({ email, password, remember_me }) {
     const normalizedEmail = email.trim().toLowerCase();
 
     // Fetch user including password_hash for verification
@@ -91,7 +91,8 @@ export const authService = {
 
     // Strip password_hash from response payload
     const { password_hash, ...safeUser } = user;
-    const token = generateToken(safeUser);
+    const expiresIn = remember_me ? env.JWT_REMEMBER_EXPIRES_IN : env.JWT_EXPIRES_IN;
+    const token = generateToken(safeUser, expiresIn);
 
     return {
       user: safeUser,

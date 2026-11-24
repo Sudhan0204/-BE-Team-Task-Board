@@ -11,7 +11,7 @@ export function getEmailTransporter() {
   if (transporter) return transporter;
 
   if (env.EMAIL_HOST && env.EMAIL_USER) {
-    transporter = nodemailer.createTransporter({
+    transporter = nodemailer.createTransport({
       host: env.EMAIL_HOST,
       port: env.EMAIL_PORT,
       secure: env.EMAIL_PORT === 465,

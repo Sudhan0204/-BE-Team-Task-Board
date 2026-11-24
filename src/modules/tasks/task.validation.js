@@ -5,7 +5,7 @@ export const TASK_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
 export const createTaskSchema = z.object({
   title: z
-    .string({ required_error: 'Task title is required' })
+    .string({ error: 'Task title is required' })
     .trim()
     .min(2, 'Title must be at least 2 characters')
     .max(250, 'Title cannot exceed 250 characters'),
@@ -29,7 +29,7 @@ export const updateTaskSchema = z.object({
 
 export const updateStatusSchema = z.object({
   status: z.enum(TASK_STATUSES, {
-    errorMap: () => ({ message: `Status must be one of: ${TASK_STATUSES.join(', ')}` }),
+    error: `Status must be one of: ${TASK_STATUSES.join(', ')}`,
   }),
 });
 
@@ -38,7 +38,7 @@ export const updateAssigneeSchema = z.object({
 });
 
 export const updatePositionSchema = z.object({
-  position: z.number({ required_error: 'Position number is required' }),
+  position: z.number({ error: 'Position number is required' }),
   status: z.enum(TASK_STATUSES).optional(),
 });
 

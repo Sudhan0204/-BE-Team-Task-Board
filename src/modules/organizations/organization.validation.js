@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 export const createOrganizationSchema = z.object({
   name: z
-    .string({ required_error: 'Organization name is required' })
+    .string({ error: 'Organization name is required' })
     .trim()
     .min(2, 'Name must be at least 2 characters')
     .max(150, 'Name cannot exceed 150 characters'),
   slug: z
-    .string({ required_error: 'Organization slug is required' })
+    .string({ error: 'Organization slug is required' })
     .trim()
     .toLowerCase()
     .min(2, 'Slug must be at least 2 characters')
@@ -32,13 +32,13 @@ export const updateOrganizationSchema = z.object({
 export const addMemberSchema = z.object({
   user_id: z.union([z.string().regex(/^\d+$/), z.number().int().positive()]),
   role: z.enum(['admin', 'member'], {
-    errorMap: () => ({ message: "Role must be 'admin' or 'member'" }),
+    error: "Role must be 'admin' or 'member'",
   }),
 });
 
 export const updateMemberRoleSchema = z.object({
   role: z.enum(['owner', 'admin', 'member'], {
-    errorMap: () => ({ message: "Role must be 'owner', 'admin', or 'member'" }),
+    error: "Role must be 'owner', 'admin', or 'member'",
   }),
 });
 

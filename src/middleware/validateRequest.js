@@ -29,7 +29,8 @@ export function validateRequest(schemas) {
       next();
     } catch (err) {
       if (err.name === 'ZodError') {
-        const validationErrors = err.errors.map((e) => ({
+        const issues = err.issues || err.errors || [];
+        const validationErrors = issues.map((e) => ({
           field: e.path.join('.') || 'request',
           message: e.message,
         }));

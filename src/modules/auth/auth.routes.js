@@ -38,12 +38,11 @@ router.post(
 
 /**
  * @route   POST /api/v1/auth/logout
- * @desc    Log out the current user session
- * @access  Private
+ * @desc    Log out the current user session and clear auth cookie
+ * @access  Public (idempotent — clears cookie even if token is already expired)
  */
 router.post(
   '/logout',
-  authenticate,
   authController.logout
 );
 

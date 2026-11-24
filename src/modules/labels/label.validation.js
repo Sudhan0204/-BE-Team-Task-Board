@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const createLabelSchema = z.object({
   name: z
-    .string({ required_error: 'Label name is required' })
+    .string({ error: 'Label name is required' })
     .trim()
     .min(1, 'Label name cannot be empty')
     .max(80, 'Label name cannot exceed 80 characters'),

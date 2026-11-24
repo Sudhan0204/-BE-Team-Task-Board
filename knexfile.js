@@ -21,6 +21,16 @@ const connection = process.env.DATABASE_URL
       ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
     };
 
+const sharedDirectories = {
+  migrations: {
+    directory: './migrations',
+    tableName: 'knex_migrations',
+  },
+  seeds: {
+    directory: './seeds',
+  },
+};
+
 const config = {
   development: {
     client: 'pg',
@@ -30,6 +40,7 @@ const config = {
       max: Number(process.env.DB_POOL_MAX) || 10,
       acquireTimeoutMillis: 10000,
     },
+    ...sharedDirectories,
     debug: false,
   },
 
@@ -40,6 +51,7 @@ const config = {
       min: 1,
       max: 5,
     },
+    ...sharedDirectories,
   },
 
   production: {
@@ -50,6 +62,7 @@ const config = {
       max: Number(process.env.DB_POOL_MAX) || 20,
       acquireTimeoutMillis: 10000,
     },
+    ...sharedDirectories,
   },
 };
 

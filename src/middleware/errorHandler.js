@@ -53,10 +53,11 @@ function handleDatabaseError(err) {
  * Maps Zod validation errors to standardized 422 errors
  */
 function handleZodError(err) {
-  const errors = err.errors?.map((e) => ({
+  const issues = err.issues || err.errors || [];
+  const errors = issues.map((e) => ({
     field: e.path.join('.'),
     message: e.message,
-  })) || [];
+  }));
   return ApiError.unprocessable('Validation failed', errors);
 }
 

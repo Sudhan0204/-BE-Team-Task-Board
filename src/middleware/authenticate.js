@@ -1,28 +1,49 @@
 import jwt from 'jsonwebtoken';
 import env from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
+import { parseCookies, clearAuthCookie } from '../utils/cookies.js';
 import authModel from '../modules/auth/auth.model.js';
 
 /**
- * Authentication middleware that verifies JWT Bearer tokens and attaches the verified user to req.user.
+ * Extracts a JWT token from either the Authorization Bearer header or the HttpOnly auth cookie.
+ */
+function extractToken(req) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const bearerToken = authHeader.slice(7).trim();
+    if (bearerToken) {
+      return { token: bearerToken, source: 'header' };
+    }
+  }
+
+  const cookies = parseCookies(req.headers.cookie);
+  const cookieToken = cookies[env.AUTH_COOKIE_NAME];
+  if (cookieToken && cookieToken.trim()) {
+    return { token: cookieToken.trim(), source: 'cookie' };
+  }
+
+  return { token: null, source: null };
+}
+
+/**
+ * Authentication middleware that verifies JWT tokens (from Bearer header or HttpOnly cookie)
+ * and attaches the verified user to req.user.
  */
 export async function authenticate(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
+    const { token, source } = extractToken(req);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw ApiError.unauthorized('Authentication token is required.');
-    }
-
-    const token = authHeader.split(' ')[1];
     if (!token) {
-      throw ApiError.unauthorized('Authentication token is malformed.');
+      throw ApiError.unauthorized('Authentication token is required.');
     }
 
     let decoded;
     try {
       decoded = jwt.verify(token, env.JWT_SECRET);
     } catch (err) {
+      if (source === 'cookie') {
+        clearAuthCookie(res);
+      }
       if (err.name === 'TokenExpiredError') {
         throw ApiError.unauthorized('Authentication token has expired. Please log in again.');
       }
@@ -32,6 +53,9 @@ export async function authenticate(req, res, next) {
     // Verify user still exists in database and remains active
     const user = await authModel.findById(decoded.sub);
     if (!user) {
+      if (source === 'cookie') {
+        clearAuthCookie(res);
+      }
       throw ApiError.unauthorized('The user belonging to this token no longer exists.');
     }
 

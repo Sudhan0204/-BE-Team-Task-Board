@@ -5,7 +5,7 @@ import logger from './logger.js';
 
 // Configure node-pg to keep BIGINT (OID 20) as string in JS to prevent IEEE-754 precision loss
 pg.types.setTypeParser(20, (val) => (val === null ? null : String(val)));
-console.log("hello", env.DATABASE_URL)
+
 // Determine connection settings based on DATABASE_URL or individual parameters
 const connectionConfig = env.DATABASE_URL
   ? {

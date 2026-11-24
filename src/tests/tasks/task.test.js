@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../../app.js';
-import taskModel from '../../modules/tasks/task.model.js';
-import projectModel from '../../modules/projects/project.model.js';
 import authModel from '../../modules/auth/auth.model.js';
 import jwt from 'jsonwebtoken';
 import env from '../../config/env.js';
@@ -10,6 +8,19 @@ import env from '../../config/env.js';
 vi.mock('../../modules/tasks/task.model.js');
 vi.mock('../../modules/projects/project.model.js');
 vi.mock('../../modules/auth/auth.model.js');
+vi.mock('../../middleware/authorize.js', () => ({
+  requireOrgMember: () => (req, res, next) => next(),
+  requireProjectAccess: () => (req, res, next) => {
+    req.project = { project_id: req.params.projectId, organization_id: '1' };
+    next();
+  },
+  requireTaskAccess: () => (req, res, next) => {
+    req.task = { task_id: req.params.taskId, project_id: '1', status: 'todo' };
+    req.project = { project_id: '1', organization_id: '1' };
+    next();
+  },
+  default: {},
+}));
 
 describe('Tasks Module - API Tests', () => {
   const token = jwt.sign({ sub: '1', email: 'dev@example.com' }, env.JWT_SECRET);
@@ -34,8 +45,8 @@ describe('Tasks Module - API Tests', () => {
           status: 'invalid_status_value',
         });
 
-      // 422 or 403 (if project guard intercepts first)
-      expect([403, 422]).toContain(res.status);
+      expect(res.status).toBe(422);
+      expect(res.body.success).toBe(false);
     });
 
     it('should reject empty title with 422 Unprocessable Entity', async () => {
@@ -46,7 +57,8 @@ describe('Tasks Module - API Tests', () => {
           title: '',
         });
 
-      expect([403, 422]).toContain(res.status);
+      expect(res.status).toBe(422);
+      expect(res.body.success).toBe(false);
     });
   });
 
@@ -59,7 +71,8 @@ describe('Tasks Module - API Tests', () => {
           status: 'non_existent_status',
         });
 
-      expect([403, 422]).toContain(res.status);
+      expect(res.status).toBe(422);
+      expect(res.body.success).toBe(false);
     });
   });
 });

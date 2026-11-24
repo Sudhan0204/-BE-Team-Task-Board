@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 export const createProjectSchema = z.object({
   name: z
-    .string({ required_error: 'Project name is required' })
+    .string({ error: 'Project name is required' })
     .trim()
     .min(2, 'Project name must be at least 2 characters')
     .max(200, 'Project name cannot exceed 200 characters'),
   project_key: z
-    .string({ required_error: 'Project key is required' })
+    .string({ error: 'Project key is required' })
     .trim()
     .toUpperCase()
     .min(2, 'Project key must be at least 2 characters')
@@ -34,7 +34,7 @@ export const addProjectMemberSchema = z.object({
 
 export const updateProjectMemberRoleSchema = z.object({
   role: z.enum(['project_manager', 'developer', 'viewer'], {
-    errorMap: () => ({ message: "Role must be 'project_manager', 'developer', or 'viewer'" }),
+    error: "Role must be 'project_manager', 'developer', or 'viewer'",
   }),
 });
 
