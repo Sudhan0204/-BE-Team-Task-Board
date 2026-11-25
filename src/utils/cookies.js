@@ -69,8 +69,27 @@ export function clearAuthCookie(res) {
   res.clearCookie(env.AUTH_COOKIE_NAME, getBaseCookieOptions());
 }
 
+/**
+ * Sets the Platform Super Admin HttpOnly cookie (strictly separate cookie name).
+ */
+export function setSuperAdminCookie(res, token) {
+  res.cookie(env.SUPER_ADMIN_COOKIE_NAME, token, {
+    ...getBaseCookieOptions(),
+    maxAge: 12 * 60 * 60 * 1000,
+  });
+}
+
+/**
+ * Clears the Platform Super Admin HttpOnly cookie.
+ */
+export function clearSuperAdminCookie(res) {
+  res.clearCookie(env.SUPER_ADMIN_COOKIE_NAME, getBaseCookieOptions());
+}
+
 export default {
   parseCookies,
   setAuthCookie,
   clearAuthCookie,
+  setSuperAdminCookie,
+  clearSuperAdminCookie,
 };

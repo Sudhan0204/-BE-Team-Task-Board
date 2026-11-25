@@ -1,29 +1,33 @@
 import db from '../../config/database.js';
 
 export const commentModel = {
-  /**
-   * Insert a new comment on a task
-   */
-  async create({ task_id, user_id, comment_text }) {
+  async create({ tenant_id, task_id, user_id, comment_text }) {
     const [comment] = await db('task_comments')
       .insert({
+        tenant_id,
         task_id,
         user_id,
         comment_text,
       })
-      .returning(['comment_id', 'task_id', 'user_id', 'comment_text', 'created_at', 'updated_at']);
+      .returning([
+        'comment_id',
+        'tenant_id',
+        'task_id',
+        'user_id',
+        'comment_text',
+        'created_at',
+        'updated_at',
+      ]);
     return comment;
   },
 
-  /**
-   * Find comment by ID with author details
-   */
-  async findById(commentId) {
-    return db('task_comments as c')
+  async findById(commentId, tenantId = null) {
+    const query = db('task_comments as c')
       .join('users as u', 'c.user_id', 'u.user_id')
       .join('tasks as t', 'c.task_id', 't.task_id')
       .select([
         'c.comment_id',
+        'c.tenant_id',
         'c.task_id',
         'c.user_id',
         'c.comment_text',
@@ -34,23 +38,22 @@ export const commentModel = {
         'u.avatar_url as author_avatar',
         't.project_id',
       ])
-      .where('c.comment_id', commentId)
-      .first();
+      .where('c.comment_id', commentId);
+
+    if (tenantId) query.andWhere('c.tenant_id', tenantId);
+    return query.first();
   },
 
-  /**
-   * List paginated comments for a task
-   */
-  async listByTask(taskId, { offset, limit }) {
-    const totalQuery = db('task_comments')
-      .where('task_id', taskId)
-      .count('comment_id as total')
-      .first();
+  async listByTask(taskId, { offset, limit }, tenantId = null) {
+    const countQuery = db('task_comments').where('task_id', taskId);
+    if (tenantId) countQuery.andWhere('tenant_id', tenantId);
+    const totalQuery = countQuery.count('comment_id as total').first();
 
     const dataQuery = db('task_comments as c')
       .join('users as u', 'c.user_id', 'u.user_id')
       .select([
         'c.comment_id',
+        'c.tenant_id',
         'c.task_id',
         'c.user_id',
         'c.comment_text',
@@ -65,31 +68,39 @@ export const commentModel = {
       .offset(offset)
       .limit(limit);
 
+    if (tenantId) dataQuery.andWhere('c.tenant_id', tenantId);
+
     const [totalResult, comments] = await Promise.all([totalQuery, dataQuery]);
     const total = parseInt(totalResult?.total || 0, 10);
 
     return { comments, total };
   },
 
-  /**
-   * Update comment text
-   */
-  async update(commentId, comment_text) {
-    const [updated] = await db('task_comments')
-      .where('comment_id', commentId)
+  async update(commentId, comment_text, tenantId = null) {
+    const query = db('task_comments').where('comment_id', commentId);
+    if (tenantId) query.andWhere('tenant_id', tenantId);
+
+    const [updated] = await query
       .update({
         comment_text,
         updated_at: db.fn.now(),
       })
-      .returning(['comment_id', 'task_id', 'user_id', 'comment_text', 'created_at', 'updated_at']);
+      .returning([
+        'comment_id',
+        'tenant_id',
+        'task_id',
+        'user_id',
+        'comment_text',
+        'created_at',
+        'updated_at',
+      ]);
     return updated;
   },
 
-  /**
-   * Delete comment
-   */
-  async delete(commentId) {
-    return db('task_comments').where('comment_id', commentId).delete();
+  async delete(commentId, tenantId = null) {
+    const query = db('task_comments').where('comment_id', commentId);
+    if (tenantId) query.andWhere('tenant_id', tenantId);
+    return query.delete();
   },
 };
 

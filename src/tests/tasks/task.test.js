@@ -9,6 +9,8 @@ vi.mock('../../modules/tasks/task.model.js');
 vi.mock('../../modules/projects/project.model.js');
 vi.mock('../../modules/auth/auth.model.js');
 vi.mock('../../middleware/authorize.js', () => ({
+  requirePermission: () => (req, res, next) => next(),
+  requireAllPermissions: () => (req, res, next) => next(),
   requireOrgMember: () => (req, res, next) => next(),
   requireProjectAccess: () => (req, res, next) => {
     req.project = { project_id: req.params.projectId, organization_id: '1' };

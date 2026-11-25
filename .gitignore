@@ -24,7 +24,8 @@ tmp/
 *.tmp
 
 # Local file uploads
-uploads/
+uploads/*
+!uploads/.gitkeep
 
 # OS & Editor files
 .DS_Store

@@ -4,12 +4,10 @@ import { getPaginationParams } from '../../utils/pagination.js';
 import logger from '../../config/logger.js';
 
 export const notificationService = {
-  /**
-   * Safe asynchronous notification dispatcher (errors do not compromise primary operation)
-   */
-  async notifyUser({ userId, taskId = null, title, message }) {
+  async notifyUser({ tenantId, userId, taskId = null, title, message }) {
     try {
       return await notificationModel.create({
+        tenant_id: tenantId,
         user_id: userId,
         task_id: taskId,
         title,
@@ -24,16 +22,17 @@ export const notificationService = {
     }
   },
 
-  /**
-   * List paginated notifications for current user
-   */
-  async getUserNotifications(userId, query) {
+  async getUserNotifications(userId, query, tenantId = null) {
     const pagination = getPaginationParams(query, {
       defaultLimit: 20,
       maxLimit: 50,
     });
 
-    const { notifications, total } = await notificationModel.listByUser(userId, pagination);
+    const { notifications, total } = await notificationModel.listByUser(
+      userId,
+      pagination,
+      tenantId
+    );
 
     return {
       notifications,
@@ -45,19 +44,13 @@ export const notificationService = {
     };
   },
 
-  /**
-   * Get unread notification count
-   */
-  async getUnreadCount(userId) {
-    const count = await notificationModel.countUnread(userId);
+  async getUnreadCount(userId, tenantId = null) {
+    const count = await notificationModel.countUnread(userId, tenantId);
     return { unread_count: count };
   },
 
-  /**
-   * Mark single notification as read (with ownership validation)
-   */
-  async markNotificationAsRead(notificationId, userId) {
-    const notification = await notificationModel.findById(notificationId);
+  async markNotificationAsRead(notificationId, userId, tenantId = null) {
+    const notification = await notificationModel.findById(notificationId, tenantId);
     if (!notification) {
       throw ApiError.notFound('Notification not found.');
     }
@@ -66,22 +59,16 @@ export const notificationService = {
       throw ApiError.forbidden('You do not have permission to access this notification.');
     }
 
-    return notificationModel.markAsRead(notificationId, userId);
+    return notificationModel.markAsRead(notificationId, userId, tenantId);
   },
 
-  /**
-   * Mark all notifications as read for current user
-   */
-  async markAllNotificationsAsRead(userId) {
-    await notificationModel.markAllAsRead(userId);
+  async markAllNotificationsAsRead(userId, tenantId = null) {
+    await notificationModel.markAllAsRead(userId, tenantId);
     return { success: true };
   },
 
-  /**
-   * Delete single notification (with ownership validation)
-   */
-  async deleteNotification(notificationId, userId) {
-    const notification = await notificationModel.findById(notificationId);
+  async deleteNotification(notificationId, userId, tenantId = null) {
+    const notification = await notificationModel.findById(notificationId, tenantId);
     if (!notification) {
       throw ApiError.notFound('Notification not found.');
     }
@@ -90,7 +77,7 @@ export const notificationService = {
       throw ApiError.forbidden('You do not have permission to delete this notification.');
     }
 
-    await notificationModel.delete(notificationId, userId);
+    await notificationModel.delete(notificationId, userId, tenantId);
     return { success: true };
   },
 };

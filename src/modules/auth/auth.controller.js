@@ -2,28 +2,49 @@ import authService from './auth.service.js';
 import { sendSuccess, sendCreated } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { setAuthCookie, clearAuthCookie } from '../../utils/cookies.js';
+import { extractTenantSlug } from '../../middleware/resolveTenant.js';
 
 export const authController = {
   /**
-   * POST /api/v1/auth/register
+   * POST /api/auth/register
    */
   register: asyncHandler(async (req, res) => {
-    const result = await authService.register(req.body);
+    const tenant_slug = extractTenantSlug(req);
+    const result = await authService.register({ ...req.body, tenant_slug });
     setAuthCookie(res, result.token, { rememberMe: true });
     return sendCreated(res, 'User registered successfully', result);
   }),
 
   /**
-   * POST /api/v1/auth/login
+   * POST /api/auth/login (Employee & Company User Login)
    */
   login: asyncHandler(async (req, res) => {
-    const result = await authService.login(req.body);
+    const tenant_slug = extractTenantSlug(req);
+    const result = await authService.login({
+      ...req.body,
+      tenant_slug,
+      requireAdmin: false,
+    });
     setAuthCookie(res, result.token, { rememberMe: req.body.remember_me !== false });
     return sendSuccess(res, 'Login successful', result);
   }),
 
   /**
-   * POST /api/v1/auth/logout
+   * POST /api/admin/login (Company Admin Portal Login)
+   */
+  adminLogin: asyncHandler(async (req, res) => {
+    const tenant_slug = extractTenantSlug(req);
+    const result = await authService.login({
+      ...req.body,
+      tenant_slug,
+      requireAdmin: true,
+    });
+    setAuthCookie(res, result.token, { rememberMe: req.body.remember_me !== false });
+    return sendSuccess(res, 'Company Admin login successful', result);
+  }),
+
+  /**
+   * POST /api/auth/logout
    */
   logout: asyncHandler(async (req, res) => {
     clearAuthCookie(res);
@@ -31,15 +52,15 @@ export const authController = {
   }),
 
   /**
-   * GET /api/v1/auth/me
+   * GET /api/auth/me
    */
   getMe: asyncHandler(async (req, res) => {
-    const user = await authService.getCurrentUser(req.user.user_id);
-    return sendSuccess(res, 'Current user profile retrieved successfully', { user });
+    const profile = await authService.getCurrentUser(req.user.user_id);
+    return sendSuccess(res, 'Current user profile retrieved successfully', profile);
   }),
 
   /**
-   * POST /api/v1/auth/forgot-password
+   * POST /api/auth/forgot-password
    */
   forgotPassword: asyncHandler(async (req, res) => {
     const result = await authService.requestPasswordReset(req.body);
@@ -47,7 +68,7 @@ export const authController = {
   }),
 
   /**
-   * POST /api/v1/auth/reset-password
+   * POST /api/auth/reset-password
    */
   resetPassword: asyncHandler(async (req, res) => {
     const result = await authService.resetPassword(req.body);

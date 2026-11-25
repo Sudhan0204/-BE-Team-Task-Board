@@ -1,6 +1,6 @@
 import projectModel from './project.model.js';
-import organizationModel from '../organizations/organization.model.js';
-import authModel from '../auth/auth.model.js';
+import tenantModel from '../tenants/tenant.model.js';
+import employeeModel from '../employees/employee.model.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { getPaginationParams } from '../../utils/pagination.js';
 
@@ -8,22 +8,43 @@ const ALLOWED_SORT_COLUMNS = ['name', 'project_key', 'status', 'created_at', 'du
 
 export const projectService = {
   /**
-   * Create a new project within an organization
+   * Create a new tenant-scoped project (supports both /api/projects and /api/organizations/:id/projects)
    */
-  async createProject(organizationId, userId, data) {
+  async createProject(organizationId, userId, data, tenantId = null) {
     const projectKey = data.project_key.trim().toUpperCase();
 
-    // Check project key uniqueness within the organization
-    const existing = await projectModel.findByOrgAndKey(organizationId, projectKey);
-    if (existing) {
-      throw ApiError.conflict(
-        `A project with key '${projectKey}' already exists in this organization.`,
-        [{ field: 'project_key', message: 'Project key must be unique within the organization' }]
-      );
+    if (tenantId) {
+      // Check subscription project limit
+      const [subscription, usage] = await Promise.all([
+        tenantModel.getActiveSubscription(tenantId),
+        tenantModel.countUsage(tenantId),
+      ]);
+      if (subscription?.max_projects && usage.projects >= Number(subscription.max_projects)) {
+        throw ApiError.forbidden(
+          `Project limit (${subscription.max_projects}) reached for your current subscription plan.`
+        );
+      }
+
+      const existing = await projectModel.findByTenantAndKey(tenantId, projectKey);
+      if (existing) {
+        throw ApiError.conflict(
+          `A project with key '${projectKey}' already exists in this company.`,
+          [{ field: 'project_key', message: 'Project key must be unique within the company' }]
+        );
+      }
+    } else if (organizationId) {
+      const existing = await projectModel.findByOrgAndKey(organizationId, projectKey);
+      if (existing) {
+        throw ApiError.conflict(
+          `A project with key '${projectKey}' already exists in this organization.`,
+          [{ field: 'project_key', message: 'Project key must be unique within the organization' }]
+        );
+      }
     }
 
     return projectModel.create({
-      organization_id: organizationId,
+      tenant_id: tenantId,
+      organization_id: organizationId || null,
       name: data.name.trim(),
       description: data.description,
       project_key: projectKey,
@@ -35,18 +56,23 @@ export const projectService = {
   },
 
   /**
-   * List projects belonging to an organization with pagination
+   * List projects for the authenticated tenant accessible to the user
    */
-  async listProjects(organizationId, query) {
+  async listTenantProjects(tenantId, userId, canViewAll, query) {
     const pagination = getPaginationParams(query, {
-      defaultLimit: 20,
-      maxLimit: 50,
+      defaultLimit: 50,
+      maxLimit: 100,
       allowedSortColumns: ALLOWED_SORT_COLUMNS,
       defaultSort: 'created_at',
       defaultOrder: 'desc',
     });
 
-    const { projects, total } = await projectModel.listByOrganization(organizationId, pagination);
+    const { projects, total } = await projectModel.listByTenant(tenantId, userId, {
+      canViewAll,
+      search: query.search,
+      status: query.status,
+      ...pagination,
+    });
 
     return {
       projects,
@@ -59,97 +85,106 @@ export const projectService = {
   },
 
   /**
-   * Retrieve project by ID
+   * List projects belonging to an organization (tenant-scoped)
    */
-  async getProjectById(projectId) {
-    const project = await projectModel.findById(projectId);
+  async listProjects(organizationId, query, tenantId = null) {
+    const pagination = getPaginationParams(query, {
+      defaultLimit: 20,
+      maxLimit: 50,
+      allowedSortColumns: ALLOWED_SORT_COLUMNS,
+      defaultSort: 'created_at',
+      defaultOrder: 'desc',
+    });
+
+    const { projects, total } = await projectModel.listByOrganization(
+      organizationId,
+      pagination,
+      tenantId
+    );
+
+    return {
+      projects,
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+      },
+    };
+  },
+
+  async getProjectById(projectId, tenantId = null) {
+    const project = await projectModel.findById(projectId, tenantId);
     if (!project) {
       throw ApiError.notFound('Project not found.');
     }
     return project;
   },
 
-  /**
-   * Update project details
-   */
-  async updateProject(projectId, updates) {
-    const project = await projectModel.findById(projectId);
+  async updateProject(projectId, updates, tenantId = null) {
+    const project = await projectModel.findById(projectId, tenantId);
     if (!project) {
       throw ApiError.notFound('Project not found.');
     }
-
-    const updated = await projectModel.update(projectId, updates);
-    return updated;
+    return projectModel.update(projectId, updates, tenantId);
   },
 
-  /**
-   * Delete a project
-   */
-  async deleteProject(projectId) {
-    const project = await projectModel.findById(projectId);
+  async deleteProject(projectId, tenantId = null) {
+    const project = await projectModel.findById(projectId, tenantId);
     if (!project) {
       throw ApiError.notFound('Project not found.');
     }
-
-    await projectModel.delete(projectId);
+    await projectModel.delete(projectId, tenantId);
     return { success: true };
   },
 
-  /**
-   * List members of a project
-   */
-  async getProjectMembers(projectId) {
-    return projectModel.getMembers(projectId);
+  async getProjectMembers(projectId, tenantId = null) {
+    return projectModel.getMembers(projectId, tenantId);
   },
 
   /**
-   * Add a member to a project with organization membership validation
+   * Add a member to a project — STRICTLY validates target user belongs to the SAME tenant!
    */
-  async addProjectMember(projectId, { user_id, role }) {
-    const project = await projectModel.findById(projectId);
+  async addProjectMember(projectId, { user_id, role }, tenantId = null) {
+    const project = await projectModel.findById(projectId, tenantId);
     if (!project) {
       throw ApiError.notFound('Project not found.');
     }
 
-    // 1. Verify user exists
-    const targetUser = await authModel.findById(user_id);
-    if (!targetUser) {
-      throw ApiError.notFound('Target user was not found.');
-    }
+    const effectiveTenantId = tenantId || project.tenant_id;
 
-    // 2. CRITICAL: Verify user belongs to parent organization
-    const orgMembership = await organizationModel.getMember(project.organization_id, user_id);
-    if (!orgMembership) {
+    // CRITICAL: Target employee must belong to the EXACT SAME tenant
+    const targetEmployee = await employeeModel.findById(effectiveTenantId, user_id);
+    if (!targetEmployee) {
       throw ApiError.badRequest(
-        'User must be a member of the parent organization before being added to a project.'
+        'Target user does not belong to this company workspace and cannot be added to this project.'
       );
     }
 
-    // 3. Verify user is not already a project member
-    const existingMember = await projectModel.getMember(projectId, user_id);
+    if (!targetEmployee.is_active) {
+      throw ApiError.badRequest('Inactive employees cannot be added to a project.');
+    }
+
+    const existingMember = await projectModel.getMember(projectId, user_id, effectiveTenantId);
     if (existingMember) {
-      throw ApiError.conflict('User is already assigned to this project.');
+      throw ApiError.conflict('Employee is already assigned to this project.');
     }
 
     return projectModel.addMember({
+      tenant_id: effectiveTenantId,
       project_id: projectId,
       user_id,
       role: role || 'developer',
     });
   },
 
-  /**
-   * Update a project member's role
-   */
-  async updateProjectMemberRole(projectId, targetUserId, newRole) {
-    const member = await projectModel.getMember(projectId, targetUserId);
+  async updateProjectMemberRole(projectId, targetUserId, newRole, tenantId = null) {
+    const member = await projectModel.getMember(projectId, targetUserId, tenantId);
     if (!member) {
       throw ApiError.notFound('Project member not found.');
     }
 
-    // If demoting project_manager, ensure another project_manager remains
     if (member.role === 'project_manager' && newRole !== 'project_manager') {
-      const leadCount = await projectModel.countLeads(projectId);
+      const leadCount = await projectModel.countLeads(projectId, tenantId);
       if (leadCount <= 1) {
         throw ApiError.badRequest(
           'Cannot demote the only project manager. Assign another project_manager first.'
@@ -157,20 +192,17 @@ export const projectService = {
       }
     }
 
-    return projectModel.updateMemberRole(projectId, targetUserId, newRole);
+    return projectModel.updateMemberRole(projectId, targetUserId, newRole, tenantId);
   },
 
-  /**
-   * Remove a member from a project
-   */
-  async removeProjectMember(projectId, targetUserId) {
-    const member = await projectModel.getMember(projectId, targetUserId);
+  async removeProjectMember(projectId, targetUserId, tenantId = null) {
+    const member = await projectModel.getMember(projectId, targetUserId, tenantId);
     if (!member) {
       throw ApiError.notFound('Project member not found.');
     }
 
     if (member.role === 'project_manager') {
-      const leadCount = await projectModel.countLeads(projectId);
+      const leadCount = await projectModel.countLeads(projectId, tenantId);
       if (leadCount <= 1) {
         throw ApiError.badRequest(
           'Cannot remove the only project manager. Reassign the project_manager role first.'
@@ -178,7 +210,7 @@ export const projectService = {
       }
     }
 
-    await projectModel.removeMember(projectId, targetUserId);
+    await projectModel.removeMember(projectId, targetUserId, tenantId);
     return { success: true };
   },
 };

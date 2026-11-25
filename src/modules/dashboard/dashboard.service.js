@@ -2,23 +2,26 @@ import dashboardModel from './dashboard.model.js';
 import { getPaginationParams } from '../../utils/pagination.js';
 
 export const dashboardService = {
-  /**
-   * Retrieves high-level metrics summary scoped to user's permissions
-   */
-  async getSummary(userId) {
-    return dashboardModel.getSummary(userId);
+  async getSummary(userId, tenantId = null, canViewAll = false) {
+    return dashboardModel.getSummary(userId, tenantId, canViewAll);
   },
 
-  /**
-   * Retrieves tasks assigned to current user across all projects with pagination
-   */
-  async getMyTasks(userId, query) {
+  async getCompanyDashboard(tenantId) {
+    return dashboardModel.getCompanyDashboard(tenantId);
+  },
+
+  async getMyTasks(userId, query, tenantId = null, canViewAll = false) {
     const pagination = getPaginationParams(query, {
       defaultLimit: 20,
       maxLimit: 100,
     });
 
-    const { tasks, total } = await dashboardModel.getMyTasks(userId, pagination);
+    const { tasks, total } = await dashboardModel.getMyTasks(
+      userId,
+      pagination,
+      tenantId,
+      canViewAll
+    );
 
     return {
       tasks,

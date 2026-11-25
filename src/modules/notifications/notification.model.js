@@ -1,43 +1,52 @@
 import db from '../../config/database.js';
 
 export const notificationModel = {
-  /**
-   * Create a new notification record
-   */
-  async create({ user_id, task_id = null, title, message }) {
+  async create({ tenant_id, user_id, task_id = null, title, message }) {
     const [notification] = await db('notifications')
       .insert({
+        tenant_id,
         user_id,
         task_id,
         title,
         message,
         is_read: false,
       })
-      .returning(['notification_id', 'user_id', 'task_id', 'title', 'message', 'is_read', 'created_at']);
+      .returning([
+        'notification_id',
+        'tenant_id',
+        'user_id',
+        'task_id',
+        'title',
+        'message',
+        'is_read',
+        'created_at',
+      ]);
     return notification;
   },
 
-  /**
-   * Find notification by ID
-   */
-  async findById(notificationId) {
-    return db('notifications')
-      .where('notification_id', notificationId)
-      .first();
+  async findById(notificationId, tenantId = null) {
+    const query = db('notifications').where('notification_id', notificationId);
+    if (tenantId) query.andWhere('tenant_id', tenantId);
+    return query.first();
   },
 
-  /**
-   * List paginated notifications belonging exclusively to a user
-   */
-  async listByUser(userId, { offset, limit }) {
-    const totalQuery = db('notifications')
-      .where('user_id', userId)
-      .count('notification_id as total')
-      .first();
+  async listByUser(userId, { offset, limit }, tenantId = null) {
+    const base = db('notifications').where('user_id', userId);
+    if (tenantId) base.andWhere('tenant_id', tenantId);
 
-    const dataQuery = db('notifications')
-      .where('user_id', userId)
-      .select(['notification_id', 'user_id', 'task_id', 'title', 'message', 'is_read', 'created_at'])
+    const totalQuery = base.clone().count('notification_id as total').first();
+    const dataQuery = base
+      .clone()
+      .select([
+        'notification_id',
+        'tenant_id',
+        'user_id',
+        'task_id',
+        'title',
+        'message',
+        'is_read',
+        'created_at',
+      ])
       .orderBy('created_at', 'desc')
       .offset(offset)
       .limit(limit);
@@ -48,57 +57,55 @@ export const notificationModel = {
     return { notifications, total };
   },
 
-  /**
-   * Count unread notifications for a user
-   */
-  async countUnread(userId) {
-    const result = await db('notifications')
-      .where({
-        user_id: userId,
-        is_read: false,
-      })
-      .count('notification_id as unread_count')
-      .first();
+  async countUnread(userId, tenantId = null) {
+    const query = db('notifications').where({
+      user_id: userId,
+      is_read: false,
+    });
+    if (tenantId) query.andWhere('tenant_id', tenantId);
 
+    const result = await query.count('notification_id as unread_count').first();
     return parseInt(result?.unread_count || 0, 10);
   },
 
-  /**
-   * Mark a specific notification as read (scoped to owner user)
-   */
-  async markAsRead(notificationId, userId) {
-    const [updated] = await db('notifications')
-      .where({
-        notification_id: notificationId,
-        user_id: userId,
-      })
+  async markAsRead(notificationId, userId, tenantId = null) {
+    const query = db('notifications').where({
+      notification_id: notificationId,
+      user_id: userId,
+    });
+    if (tenantId) query.andWhere('tenant_id', tenantId);
+
+    const [updated] = await query
       .update({ is_read: true })
-      .returning(['notification_id', 'user_id', 'task_id', 'title', 'message', 'is_read', 'created_at']);
+      .returning([
+        'notification_id',
+        'tenant_id',
+        'user_id',
+        'task_id',
+        'title',
+        'message',
+        'is_read',
+        'created_at',
+      ]);
     return updated;
   },
 
-  /**
-   * Mark all notifications as read for a user
-   */
-  async markAllAsRead(userId) {
-    return db('notifications')
-      .where({
-        user_id: userId,
-        is_read: false,
-      })
-      .update({ is_read: true });
+  async markAllAsRead(userId, tenantId = null) {
+    const query = db('notifications').where({
+      user_id: userId,
+      is_read: false,
+    });
+    if (tenantId) query.andWhere('tenant_id', tenantId);
+    return query.update({ is_read: true });
   },
 
-  /**
-   * Delete notification (scoped to owner user)
-   */
-  async delete(notificationId, userId) {
-    return db('notifications')
-      .where({
-        notification_id: notificationId,
-        user_id: userId,
-      })
-      .delete();
+  async delete(notificationId, userId, tenantId = null) {
+    const query = db('notifications').where({
+      notification_id: notificationId,
+      user_id: userId,
+    });
+    if (tenantId) query.andWhere('tenant_id', tenantId);
+    return query.delete();
   },
 };
 

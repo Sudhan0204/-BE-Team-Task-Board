@@ -3,7 +3,16 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import healthRoutes from './health.routes.js';
+import superAdminRoutes from '../modules/super-admin/superAdmin.routes.js';
+import tenantRoutes from '../modules/tenants/tenant.routes.js';
 import authRoutes from '../modules/auth/auth.routes.js';
+import authController from '../modules/auth/auth.controller.js';
+import { authLimiter } from '../middleware/rateLimiter.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { loginSchema } from '../modules/auth/auth.validation.js';
+import employeeRoutes from '../modules/employees/employee.routes.js';
+import roleRoutes from '../modules/roles/role.routes.js';
+import permissionRoutes from '../modules/roles/permission.routes.js';
 import organizationRoutes from '../modules/organizations/organization.routes.js';
 import projectRoutes from '../modules/projects/project.routes.js';
 import taskRoutes from '../modules/tasks/task.routes.js';
@@ -18,10 +27,9 @@ const __dirname = path.dirname(__filename);
 
 const apiRouter = Router();
 
-// Mount Health Check endpoint
+// Health & OpenAPI Docs
 apiRouter.use('/health', healthRoutes);
 
-// Mount OpenAPI 3.0 Documentation endpoint
 apiRouter.get('/docs', (req, res) => {
   const openapiPath = path.resolve(__dirname, '../docs/openapi.json');
   if (fs.existsSync(openapiPath)) {
@@ -31,8 +39,25 @@ apiRouter.get('/docs', (req, res) => {
   return res.status(404).json({ success: false, message: 'OpenAPI specification not found' });
 });
 
-// Mount Feature Modules
+// Platform Super Admin & Multi-Tenant Company Management
+apiRouter.use('/super-admin', superAdminRoutes);
+apiRouter.use('/tenants', tenantRoutes);
+
+// Company Admin Login alias (/api/admin/login and /api/v1/admin/login)
+apiRouter.post(
+  '/admin/login',
+  authLimiter,
+  validateRequest({ body: loginSchema }),
+  authController.adminLogin
+);
+
+// Company Authentication, Employees, Dynamic Roles & Permissions
 apiRouter.use('/auth', authRoutes);
+apiRouter.use('/employees', employeeRoutes);
+apiRouter.use('/roles', roleRoutes);
+apiRouter.use('/permissions', permissionRoutes);
+
+// Workspace, Projects, Tasks, Comments, Labels, Attachments, Notifications, Dashboard
 apiRouter.use('/organizations', organizationRoutes);
 apiRouter.use('/projects', projectRoutes);
 apiRouter.use('/tasks', taskRoutes);
@@ -42,25 +67,28 @@ apiRouter.use('/attachments', attachmentRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/dashboard', dashboardRoutes);
 
-// Root API v1 welcome message
 apiRouter.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'Welcome to DevFlow REST API v1',
-    version: '1.0.0',
+    message: 'Welcome to Team Task Board Multi-Tenant SaaS REST API',
+    version: '2.0.0',
     documentation: '/api/v1/docs',
     endpoints: {
-      health: '/api/v1/health',
-      docs: '/api/v1/docs',
-      auth: '/api/v1/auth',
-      organizations: '/api/v1/organizations',
-      projects: '/api/v1/projects',
-      tasks: '/api/v1/tasks',
-      comments: '/api/v1/comments',
-      labels: '/api/v1/labels',
-      attachments: '/api/v1/attachments',
-      notifications: '/api/v1/notifications',
-      dashboard: '/api/v1/dashboard',
+      health: '/api/health',
+      superAdmin: '/api/super-admin',
+      tenants: '/api/tenants',
+      adminLogin: '/api/admin/login',
+      auth: '/api/auth',
+      employees: '/api/employees',
+      roles: '/api/roles',
+      permissions: '/api/permissions',
+      projects: '/api/projects',
+      tasks: '/api/tasks',
+      comments: '/api/comments',
+      labels: '/api/labels',
+      attachments: '/api/attachments',
+      notifications: '/api/notifications',
+      dashboard: '/api/dashboard',
     },
   });
 });

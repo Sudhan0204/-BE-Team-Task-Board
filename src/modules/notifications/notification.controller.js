@@ -6,33 +6,36 @@ export const notificationController = {
   list: asyncHandler(async (req, res) => {
     const { notifications, pagination } = await notificationService.getUserNotifications(
       req.user.user_id,
-      req.query
+      req.query,
+      req.tenantId
     );
     return sendPaginated(res, notifications, pagination, 'Notifications retrieved successfully');
   }),
 
   unreadCount: asyncHandler(async (req, res) => {
-    const result = await notificationService.getUnreadCount(req.user.user_id);
+    const result = await notificationService.getUnreadCount(req.user.user_id, req.tenantId);
     return sendSuccess(res, 'Unread notification count retrieved', result);
   }),
 
   markAsRead: asyncHandler(async (req, res) => {
     const notification = await notificationService.markNotificationAsRead(
       req.params.notificationId,
-      req.user.user_id
+      req.user.user_id,
+      req.tenantId
     );
     return sendSuccess(res, 'Notification marked as read', { notification });
   }),
 
   markAllAsRead: asyncHandler(async (req, res) => {
-    await notificationService.markAllNotificationsAsRead(req.user.user_id);
+    await notificationService.markAllNotificationsAsRead(req.user.user_id, req.tenantId);
     return sendSuccess(res, 'All notifications marked as read');
   }),
 
   delete: asyncHandler(async (req, res) => {
     await notificationService.deleteNotification(
       req.params.notificationId,
-      req.user.user_id
+      req.user.user_id,
+      req.tenantId
     );
     return sendNoContent(res);
   }),

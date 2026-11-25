@@ -37,6 +37,13 @@ export const env = {
   JWT_RESET_EXPIRES_IN: process.env.JWT_RESET_EXPIRES_IN || '1h',
   AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME || 'devflow_token',
 
+  // Platform Super Admin JWT (strictly separated from tenant JWT)
+  SUPER_ADMIN_JWT_SECRET: process.env.SUPER_ADMIN_JWT_SECRET || '',
+  SUPER_ADMIN_JWT_EXPIRES_IN: process.env.SUPER_ADMIN_JWT_EXPIRES_IN || '12h',
+  SUPER_ADMIN_COOKIE_NAME: process.env.SUPER_ADMIN_COOKIE_NAME || 'devflow_super_admin_token',
+  SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || 'superadmin@teamtaskboard.app',
+  SUPER_ADMIN_PASSWORD: process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin@123',
+
   // Email (Nodemailer for password recovery)
   EMAIL_HOST: process.env.EMAIL_HOST || '',
   EMAIL_PORT: Number(process.env.EMAIL_PORT) || 587,
@@ -64,6 +71,14 @@ export function validateEnv() {
     missing.push('JWT_SECRET (must be at least 16 characters)');
   }
 
+  if (!env.SUPER_ADMIN_JWT_SECRET || env.SUPER_ADMIN_JWT_SECRET.trim().length < 16) {
+    missing.push('SUPER_ADMIN_JWT_SECRET (must be at least 16 characters)');
+  }
+
+  if (env.JWT_SECRET && env.SUPER_ADMIN_JWT_SECRET && env.JWT_SECRET === env.SUPER_ADMIN_JWT_SECRET) {
+    missing.push('SUPER_ADMIN_JWT_SECRET (must be distinct from JWT_SECRET)');
+  }
+
   if (!env.DATABASE_URL) {
     if (!env.DB_HOST) missing.push('DB_HOST');
     if (!env.DB_NAME) missing.push('DB_NAME');
@@ -80,6 +95,9 @@ export function validateEnv() {
 // Validate immediately on module load (skip strict failure only if test env provides fallback)
 if (env.isTest && !env.JWT_SECRET) {
   env.JWT_SECRET = 'test_jwt_secret_key_minimum_32_characters_long';
+}
+if (env.isTest && !env.SUPER_ADMIN_JWT_SECRET) {
+  env.SUPER_ADMIN_JWT_SECRET = 'test_super_admin_jwt_secret_key_32_chars_long';
 }
 validateEnv();
 

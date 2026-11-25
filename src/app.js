@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import helmet from 'helmet';
 import cors from 'cors';
 import env from './config/env.js';
@@ -13,13 +14,16 @@ export const app = express();
 // Trust proxy if deployed behind reverse proxy (e.g., Cloud Run, Nginx)
 app.set('trust proxy', 1);
 
-// HTTP Security Headers
-app.use(helmet());
+// HTTP Security Headers (allow cross-origin resource loading for uploaded company logos/avatars)
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // Cross-Origin Resource Sharing (CORS)
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [env.FRONTEND_URL, 'http://localhost:3000', 'http://localhost:5173'];
@@ -30,7 +34,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Tenant-Slug'],
 };
 app.use(cors(corsOptions));
 
@@ -41,21 +45,32 @@ app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Controlled static file serving for uploaded company logos and task attachments
+app.use(
+  '/uploads',
+  express.static(path.resolve(process.cwd(), 'uploads'), {
+    maxAge: '1d',
+    index: false,
+  })
+);
+
 // Global Rate Limiting for API routes
 app.use('/api', apiLimiter);
 
-// Mount API v1 router
+// Mount unified API router on BOTH /api/v1 (legacy/versioned) and /api (SaaS spec)
 app.use('/api/v1', apiRouter);
+app.use('/api', apiRouter);
 
-// Root index redirect/info
+// Root index info
 app.get('/', (req, res) => {
   res.json({
-    name: 'DevFlow Backend Service',
-    description: 'REST API backend for DevFlow task management system',
+    name: 'Team Task Board Multi-Tenant SaaS API',
+    description: 'Multi-tenant project management and dynamic RBAC backend',
     status: 'online',
-    version: '1.0.0',
+    version: '2.0.0',
+    api: '/api',
     apiV1: '/api/v1',
-    health: '/api/v1/health',
+    health: '/api/health',
   });
 });
 

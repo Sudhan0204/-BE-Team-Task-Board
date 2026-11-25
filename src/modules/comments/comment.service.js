@@ -1,31 +1,25 @@
 import commentModel from './comment.model.js';
 import projectModel from '../projects/project.model.js';
-import organizationModel from '../organizations/organization.model.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { getPaginationParams } from '../../utils/pagination.js';
 
 export const commentService = {
-  /**
-   * Add a comment to a task
-   */
-  async createComment(taskId, userId, { comment_text }) {
+  async createComment(taskId, userId, { comment_text }, tenantId = null) {
     return commentModel.create({
+      tenant_id: tenantId,
       task_id: taskId,
       user_id: userId,
       comment_text: comment_text.trim(),
     });
   },
 
-  /**
-   * List comments on a task with pagination
-   */
-  async listComments(taskId, query) {
+  async listComments(taskId, query, tenantId = null) {
     const pagination = getPaginationParams(query, {
       defaultLimit: 30,
       maxLimit: 100,
     });
 
-    const { comments, total } = await commentModel.listByTask(taskId, pagination);
+    const { comments, total } = await commentModel.listByTask(taskId, pagination, tenantId);
 
     return {
       comments,
@@ -37,47 +31,40 @@ export const commentService = {
     };
   },
 
-  /**
-   * Update comment text (Author or Admin only)
-   */
-  async updateComment(commentId, actorUser, { comment_text }) {
-    const comment = await commentModel.findById(commentId);
+  async updateComment(commentId, actorUser, { comment_text }, tenantId = null, canModerate = false) {
+    const comment = await commentModel.findById(commentId, tenantId);
     if (!comment) {
       throw ApiError.notFound('Comment not found.');
     }
 
     const isAuthor = String(comment.user_id) === String(actorUser.user_id);
-    if (!isAuthor) {
-      // Check if actor is project lead or org admin/owner
-      const projectMember = await projectModel.getMember(comment.project_id, actorUser.user_id);
-      const isLead = projectMember?.role === 'lead';
+    if (!isAuthor && !canModerate) {
+      const projectMember = await projectModel.getMember(comment.project_id, actorUser.user_id, tenantId);
+      const isLead = projectMember?.role === 'lead' || projectMember?.role === 'project_manager';
       if (!isLead) {
         throw ApiError.forbidden('You can only edit your own comments.');
       }
     }
 
-    return commentModel.update(commentId, comment_text.trim());
+    return commentModel.update(commentId, comment_text.trim(), tenantId);
   },
 
-  /**
-   * Delete comment (Author or Admin only)
-   */
-  async deleteComment(commentId, actorUser) {
-    const comment = await commentModel.findById(commentId);
+  async deleteComment(commentId, actorUser, tenantId = null, canModerate = false) {
+    const comment = await commentModel.findById(commentId, tenantId);
     if (!comment) {
       throw ApiError.notFound('Comment not found.');
     }
 
     const isAuthor = String(comment.user_id) === String(actorUser.user_id);
-    if (!isAuthor) {
-      const projectMember = await projectModel.getMember(comment.project_id, actorUser.user_id);
-      const isLead = projectMember?.role === 'lead';
+    if (!isAuthor && !canModerate) {
+      const projectMember = await projectModel.getMember(comment.project_id, actorUser.user_id, tenantId);
+      const isLead = projectMember?.role === 'lead' || projectMember?.role === 'project_manager';
       if (!isLead) {
         throw ApiError.forbidden('You do not have permission to delete this comment.');
       }
     }
 
-    await commentModel.delete(commentId);
+    await commentModel.delete(commentId, tenantId);
     return { success: true };
   },
 };

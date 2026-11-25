@@ -9,18 +9,18 @@ const ALLOWED_TASK_SORT_COLUMNS = ['created_at', 'updated_at', 'position', 'due_
 
 export const taskService = {
   /**
-   * Create a new task within a project
+   * Create a new tenant-scoped task within a project
    */
-  async createTask(projectId, userId, data) {
-    // Validate assignee if provided
+  async createTask(projectId, userId, data, tenantId = null) {
     if (data.assigned_to) {
-      const isMember = await projectModel.getMember(projectId, data.assigned_to);
+      const isMember = await projectModel.getMember(projectId, data.assigned_to, tenantId);
       if (!isMember) {
         throw ApiError.badRequest('Assigned user must be a verified member of this project.');
       }
     }
 
     const task = await taskModel.create({
+      tenant_id: tenantId,
       project_id: projectId,
       title: data.title.trim(),
       description: data.description,
@@ -34,6 +34,7 @@ export const taskService = {
 
     if (task.assigned_to && String(task.assigned_to) !== String(userId)) {
       notificationService.notifyUser({
+        tenantId: tenantId || task.tenant_id,
         userId: task.assigned_to,
         taskId: task.task_id,
         title: 'Task Assigned',
@@ -44,21 +45,46 @@ export const taskService = {
     return task;
   },
 
-  /**
-   * Get task by ID
-   */
-  async getTaskById(taskId) {
-    const task = await taskModel.findById(taskId);
+  async listTenantTasks(tenantId, userId, canViewAll, query) {
+    const pagination = getPaginationParams(query, {
+      defaultLimit: 50,
+      maxLimit: 100,
+      allowedSortColumns: ALLOWED_TASK_SORT_COLUMNS,
+      defaultSort: 'created_at',
+      defaultOrder: 'desc',
+    });
+
+    const { tasks, total } = await taskModel.listByTenant(tenantId, userId, {
+      canViewAll,
+      filters: {
+        project_id: query.project_id,
+        status: query.status,
+        priority: query.priority,
+        assigned_to: query.assigned_to,
+        search: query.search,
+      },
+      pagination,
+    });
+
+    return {
+      tasks,
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+      },
+    };
+  },
+
+  async getTaskById(taskId, tenantId = null) {
+    const task = await taskModel.findById(taskId, tenantId);
     if (!task) {
       throw ApiError.notFound('Task not found.');
     }
     return task;
   },
 
-  /**
-   * List tasks for a project with filtering, search, and pagination
-   */
-  async listTasks(projectId, query) {
+  async listTasks(projectId, query, tenantId = null) {
     const pagination = getPaginationParams(query, {
       defaultLimit: 20,
       maxLimit: 100,
@@ -77,6 +103,7 @@ export const taskService = {
 
     const { tasks, total } = await taskModel.list({
       projectId,
+      tenantId,
       filters,
       pagination,
     });
@@ -91,13 +118,9 @@ export const taskService = {
     };
   },
 
-  /**
-   * Retrieves tasks structured for the Kanban board view, grouped by status column
-   */
-  async getKanbanBoard(projectId) {
-    const allTasks = await taskModel.getBoardTasks(projectId);
+  async getKanbanBoard(projectId, tenantId = null) {
+    const allTasks = await taskModel.getBoardTasks(projectId, tenantId);
 
-    // Group tasks by status columns
     const columns = {};
     for (const status of TASK_STATUSES) {
       columns[status] = [];
@@ -107,7 +130,6 @@ export const taskService = {
       if (columns[task.status]) {
         columns[task.status].push(task);
       } else {
-        // Fallback for custom or unmapped status
         columns[task.status] = [task];
       }
     }
@@ -118,19 +140,18 @@ export const taskService = {
     };
   },
 
-  /**
-   * Update task general fields
-   */
-  async updateTask(taskId, currentTask, userId, updates) {
-    // 1. Verify assignee eligibility if updating assigned_to
+  async updateTask(taskId, currentTask, userId, updates, tenantId = null) {
     if (updates.assigned_to !== undefined && updates.assigned_to !== null) {
-      const isMember = await projectModel.getMember(currentTask.project_id, updates.assigned_to);
+      const isMember = await projectModel.getMember(
+        currentTask.project_id,
+        updates.assigned_to,
+        tenantId
+      );
       if (!isMember) {
         throw ApiError.badRequest('Assigned user must be a member of this project.');
       }
     }
 
-    // 2. Adjust completed_at when status changes
     const finalUpdates = { ...updates };
     if (updates.status) {
       if (updates.status === 'done' && currentTask.status !== 'done') {
@@ -140,7 +161,6 @@ export const taskService = {
       }
     }
 
-    // Capture diff for activity log
     const oldValue = {};
     const newValue = {};
     for (const key of Object.keys(updates)) {
@@ -156,14 +176,12 @@ export const taskService = {
       userId,
       'updated',
       Object.keys(oldValue).length > 0 ? oldValue : null,
-      Object.keys(newValue).length > 0 ? newValue : null
+      Object.keys(newValue).length > 0 ? newValue : null,
+      tenantId
     );
   },
 
-  /**
-   * Specialized status update endpoint
-   */
-  async updateStatus(taskId, currentTask, userId, newStatus) {
+  async updateStatus(taskId, currentTask, userId, newStatus, tenantId = null) {
     if (currentTask.status === newStatus) {
       return currentTask;
     }
@@ -181,16 +199,18 @@ export const taskService = {
       userId,
       'status_changed',
       { status: currentTask.status },
-      { status: newStatus }
+      { status: newStatus },
+      tenantId
     );
   },
 
-  /**
-   * Specialized assignee update endpoint
-   */
-  async updateAssignee(taskId, currentTask, userId, newAssigneeId) {
+  async updateAssignee(taskId, currentTask, userId, newAssigneeId, tenantId = null) {
     if (newAssigneeId !== null) {
-      const isMember = await projectModel.getMember(currentTask.project_id, newAssigneeId);
+      const isMember = await projectModel.getMember(
+        currentTask.project_id,
+        newAssigneeId,
+        tenantId
+      );
       if (!isMember) {
         throw ApiError.badRequest('Assigned user must be a member of this project.');
       }
@@ -202,11 +222,13 @@ export const taskService = {
       userId,
       newAssigneeId ? 'assigned' : 'unassigned',
       { assigned_to: currentTask.assigned_to },
-      { assigned_to: newAssigneeId }
+      { assigned_to: newAssigneeId },
+      tenantId
     );
 
     if (newAssigneeId && String(newAssigneeId) !== String(userId)) {
       notificationService.notifyUser({
+        tenantId: tenantId || currentTask.tenant_id,
         userId: newAssigneeId,
         taskId,
         title: 'Task Assigned',
@@ -217,10 +239,7 @@ export const taskService = {
     return updated;
   },
 
-  /**
-   * Specialized position reordering endpoint (Kanban drag-and-drop)
-   */
-  async updatePosition(taskId, currentTask, userId, newPosition, newStatus) {
+  async updatePosition(taskId, currentTask, userId, newPosition, newStatus, tenantId = null) {
     const updates = { position: newPosition };
     const oldValue = { position: currentTask.position };
     const newValue = { position: newPosition };
@@ -243,23 +262,18 @@ export const taskService = {
       userId,
       'position_changed',
       oldValue,
-      newValue
+      newValue,
+      tenantId
     );
   },
 
-  /**
-   * Delete task
-   */
-  async deleteTask(taskId) {
-    await taskModel.delete(taskId);
+  async deleteTask(taskId, tenantId = null) {
+    await taskModel.delete(taskId, tenantId);
     return { success: true };
   },
 
-  /**
-   * Retrieve activity audit logs for a project
-   */
-  async getProjectActivity(projectId) {
-    return taskModel.getActivityLogs(projectId);
+  async getProjectActivity(projectId, tenantId = null) {
+    return taskModel.getActivityLogs(projectId, null, tenantId);
   },
 };
 

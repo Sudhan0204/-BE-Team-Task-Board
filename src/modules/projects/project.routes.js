@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import projectController from './project.controller.js';
 import { authenticate } from '../../middleware/authenticate.js';
-import { requireProjectAccess } from '../../middleware/authorize.js';
+import { requirePermission, requireProjectAccess } from '../../middleware/authorize.js';
 import { validateRequest } from '../../middleware/validateRequest.js';
 import {
+  createProjectSchema,
   updateProjectSchema,
   addProjectMemberSchema,
   updateProjectMemberRoleSchema,
@@ -19,151 +20,109 @@ const router = Router();
 router.use(authenticate);
 
 /**
- * @route   GET /api/v1/projects/:projectId
- * @desc    Retrieve project by ID
- * @access  Private (Project Member: viewer or higher, or Org Admin/Owner)
+ * Top-level tenant-scoped Project routes
  */
 router.get(
+  '/',
+  requirePermission('projects.view', 'tasks.view', 'dashboard.view'),
+  projectController.list
+);
+
+router.post(
+  '/',
+  requirePermission('projects.create'),
+  validateRequest({ body: createProjectSchema }),
+  projectController.createDirect
+);
+
+router.get(
   '/:projectId',
-  requireProjectAccess('viewer'),
+  requireProjectAccess('viewer', ['projects.view', 'tasks.view']),
   projectController.getById
 );
 
-/**
- * @route   PATCH /api/v1/projects/:projectId
- * @desc    Update project settings
- * @access  Private (Project Lead or Org Admin/Owner)
- */
 router.patch(
   '/:projectId',
-  requireProjectAccess('lead'),
+  requireProjectAccess('lead', 'projects.update'),
   validateRequest({ body: updateProjectSchema }),
   projectController.update
 );
 
-/**
- * @route   DELETE /api/v1/projects/:projectId
- * @desc    Delete a project
- * @access  Private (Project Lead or Org Admin/Owner)
- */
+router.put(
+  '/:projectId',
+  requireProjectAccess('lead', 'projects.update'),
+  validateRequest({ body: updateProjectSchema }),
+  projectController.update
+);
+
 router.delete(
   '/:projectId',
-  requireProjectAccess('lead'),
+  requireProjectAccess('lead', 'projects.delete'),
   projectController.delete
 );
 
-/**
- * @route   GET /api/v1/projects/:projectId/members
- * @desc    List members of a project
- * @access  Private (Project Member: viewer or higher, or Org Admin/Owner)
- */
 router.get(
   '/:projectId/members',
-  requireProjectAccess('viewer'),
+  requireProjectAccess('viewer', ['projects.view', 'tasks.view']),
   projectController.getMembers
 );
 
-/**
- * @route   POST /api/v1/projects/:projectId/members
- * @desc    Add a member to the project (must be member of parent organization)
- * @access  Private (Project Lead or Org Admin/Owner)
- */
 router.post(
   '/:projectId/members',
-  requireProjectAccess('lead'),
+  requireProjectAccess('lead', 'projects.update'),
   validateRequest({ body: addProjectMemberSchema }),
   projectController.addMember
 );
 
-/**
- * @route   PATCH /api/v1/projects/:projectId/members/:userId
- * @desc    Update project member's role
- * @access  Private (Project Lead or Org Admin/Owner)
- */
 router.patch(
   '/:projectId/members/:userId',
-  requireProjectAccess('lead'),
+  requireProjectAccess('lead', 'projects.update'),
   validateRequest({ body: updateProjectMemberRoleSchema }),
   projectController.updateMemberRole
 );
 
-/**
- * @route   DELETE /api/v1/projects/:projectId/members/:userId
- * @desc    Remove member from project
- * @access  Private (Project Lead or Org Admin/Owner)
- */
 router.delete(
   '/:projectId/members/:userId',
-  requireProjectAccess('lead'),
+  requireProjectAccess('lead', 'projects.update'),
   projectController.removeMember
 );
 
-/**
- * @route   POST /api/v1/projects/:projectId/tasks
- * @desc    Create a new task in the project
- * @access  Private (Project Developer or higher)
- */
 router.post(
   '/:projectId/tasks',
-  requireProjectAccess('developer'),
+  requireProjectAccess('developer', 'tasks.create'),
   validateRequest({ body: createTaskSchema }),
   taskController.create
 );
 
-/**
- * @route   GET /api/v1/projects/:projectId/tasks
- * @desc    List tasks with filtering, search, and pagination
- * @access  Private (Project Viewer or higher)
- */
 router.get(
   '/:projectId/tasks',
-  requireProjectAccess('viewer'),
+  requireProjectAccess('viewer', ['tasks.view', 'projects.view']),
   validateRequest({ query: listTasksQuerySchema }),
   taskController.list
 );
 
-/**
- * @route   GET /api/v1/projects/:projectId/board
- * @desc    Get Kanban board tasks grouped by status columns ordered by position
- * @access  Private (Project Viewer or higher)
- */
 router.get(
   '/:projectId/board',
-  requireProjectAccess('viewer'),
+  requireProjectAccess('viewer', ['tasks.view', 'projects.view']),
   taskController.getBoard
 );
 
-/**
- * @route   GET /api/v1/projects/:projectId/activity
- * @desc    Get activity logs for the project
- * @access  Private (Project Viewer or higher)
- */
 router.get(
   '/:projectId/activity',
-  requireProjectAccess('viewer'),
+  requireProjectAccess('viewer', ['tasks.view', 'projects.view']),
   taskController.getActivity
 );
 
-/**
- * @route   POST /api/v1/projects/:projectId/labels
- * @desc    Create a project label
- * @access  Private (Project Lead or Org Admin/Owner)
- */
 router.post(
   '/:projectId/labels',
-  requireProjectAccess('lead'),
+  requireProjectAccess('lead', ['projects.update', 'tasks.update']),
   validateRequest({ body: createLabelSchema }),
   labelController.create
 );
 
-/**
- * @route   GET /api/v1/projects/:projectId/labels
- * @desc    List all labels defined in project
- * @access  Private (Project Viewer or higher)
- */
 router.get(
   '/:projectId/labels',
-  requireProjectAccess('viewer'),
+  requireProjectAccess('viewer', ['tasks.view', 'projects.view']),
   labelController.list
 );
 

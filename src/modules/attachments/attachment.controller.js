@@ -7,18 +7,25 @@ export const attachmentController = {
     const attachment = await attachmentService.saveAttachment(
       req.params.taskId,
       req.user.user_id,
-      req.file
+      req.file,
+      req.tenantId
     );
     return sendCreated(res, 'File uploaded and attached to task successfully', { attachment });
   }),
 
   list: asyncHandler(async (req, res) => {
-    const attachments = await attachmentService.listAttachments(req.params.taskId);
+    const attachments = await attachmentService.listAttachments(req.params.taskId, req.tenantId);
     return sendSuccess(res, 'Task attachments retrieved successfully', { attachments });
   }),
 
   delete: asyncHandler(async (req, res) => {
-    await attachmentService.deleteAttachment(req.params.attachmentId, req.user);
+    const canModerate = req.isCompanyAdmin || req.permissionSet?.has('tasks.delete');
+    await attachmentService.deleteAttachment(
+      req.params.attachmentId,
+      req.user,
+      req.tenantId,
+      canModerate
+    );
     return sendNoContent(res);
   }),
 };

@@ -2,8 +2,13 @@ import db from '../../config/database.js';
 
 export const SAFE_USER_COLUMNS = [
   'user_id',
+  'tenant_id',
   'full_name',
   'email',
+  'employee_code',
+  'phone',
+  'department',
+  'designation',
   'avatar_url',
   'is_active',
   'email_verified',
@@ -13,13 +18,35 @@ export const SAFE_USER_COLUMNS = [
 
 export const authModel = {
   /**
-   * Find a user by email, optionally including password_hash for authentication verification
+   * Find a user by email (legacy / fallback lookup)
    */
   async findByEmail(email, includePassword = false) {
     const columns = includePassword ? [...SAFE_USER_COLUMNS, 'password_hash'] : SAFE_USER_COLUMNS;
     return db('users')
       .select(columns)
-      .where('email', email)
+      .whereRaw('LOWER(email) = ?', [email.trim().toLowerCase()])
+      .first();
+  },
+
+  /**
+   * Find all users across tenants matching an email (used to detect multi-tenant ambiguity on login)
+   */
+  async findAllByEmail(email, includePassword = false) {
+    const columns = includePassword ? [...SAFE_USER_COLUMNS, 'password_hash'] : SAFE_USER_COLUMNS;
+    return db('users')
+      .select(columns)
+      .whereRaw('LOWER(email) = ?', [email.trim().toLowerCase()]);
+  },
+
+  /**
+   * Find a user strictly scoped to a specific tenant and email
+   */
+  async findByTenantAndEmail(tenantId, email, includePassword = false) {
+    const columns = includePassword ? [...SAFE_USER_COLUMNS, 'password_hash'] : SAFE_USER_COLUMNS;
+    return db('users')
+      .select(columns)
+      .where('tenant_id', tenantId)
+      .whereRaw('LOWER(email) = ?', [email.trim().toLowerCase()])
       .first();
   },
 
@@ -34,15 +61,30 @@ export const authModel = {
   },
 
   /**
-   * Insert a new user into the users table
+   * Insert a new user into the users table within a tenant
    */
-  async create({ full_name, email, password_hash, avatar_url = null }) {
+  async create({
+    tenant_id,
+    full_name,
+    email,
+    password_hash,
+    avatar_url = null,
+    employee_code = null,
+    phone = null,
+    department = null,
+    designation = null,
+  }) {
     const [user] = await db('users')
       .insert({
+        tenant_id,
         full_name,
         email,
         password_hash,
         avatar_url,
+        employee_code,
+        phone,
+        department,
+        designation,
         is_active: true,
         email_verified: false,
       })
@@ -81,7 +123,6 @@ export const authModel = {
    */
   async consumeResetTokenAndUpdatePassword({ token_id, user_id, password_hash }) {
     return db.transaction(async (trx) => {
-      // 1. Mark token as consumed
       const updatedTokens = await trx('password_reset_tokens')
         .where('token_id', token_id)
         .whereNull('used_at')
@@ -93,7 +134,6 @@ export const authModel = {
         throw new Error('Reset token has already been used or is invalid');
       }
 
-      // 2. Update user's password_hash and updated_at
       const [updatedUser] = await trx('users')
         .where('user_id', user_id)
         .update({

@@ -32,6 +32,8 @@ export const loginSchema = z.object({
   password: z
     .string({ error: 'Password is required' })
     .min(1, 'Password cannot be empty'),
+  tenant_slug: z.string().trim().toLowerCase().max(120).optional().nullable().or(z.literal('')),
+  tenant: z.string().trim().toLowerCase().max(120).optional().nullable().or(z.literal('')),
   remember_me: z.boolean().optional(),
 });
 

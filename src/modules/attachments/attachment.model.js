@@ -1,12 +1,10 @@
 import db from '../../config/database.js';
 
 export const attachmentModel = {
-  /**
-   * Insert attachment metadata record into task_attachments
-   */
-  async create({ task_id, uploaded_by, file_name, file_url, mime_type, file_size_bytes }) {
+  async create({ tenant_id, task_id, uploaded_by, file_name, file_url, mime_type, file_size_bytes }) {
     const [attachment] = await db('task_attachments')
       .insert({
+        tenant_id,
         task_id,
         uploaded_by,
         file_name,
@@ -16,6 +14,7 @@ export const attachmentModel = {
       })
       .returning([
         'attachment_id',
+        'tenant_id',
         'task_id',
         'uploaded_by',
         'file_name',
@@ -27,15 +26,13 @@ export const attachmentModel = {
     return attachment;
   },
 
-  /**
-   * Retrieve attachment by ID with task and project info
-   */
-  async findById(attachmentId) {
-    return db('task_attachments as a')
+  async findById(attachmentId, tenantId = null) {
+    const query = db('task_attachments as a')
       .join('tasks as t', 'a.task_id', 't.task_id')
       .join('users as u', 'a.uploaded_by', 'u.user_id')
       .select([
         'a.attachment_id',
+        'a.tenant_id',
         'a.task_id',
         'a.uploaded_by',
         'a.file_name',
@@ -47,18 +44,18 @@ export const attachmentModel = {
         'u.full_name as uploader_name',
         'u.email as uploader_email',
       ])
-      .where('a.attachment_id', attachmentId)
-      .first();
+      .where('a.attachment_id', attachmentId);
+
+    if (tenantId) query.andWhere('a.tenant_id', tenantId);
+    return query.first();
   },
 
-  /**
-   * List all attachments for a specific task
-   */
-  async listByTask(taskId) {
-    return db('task_attachments as a')
+  async listByTask(taskId, tenantId = null) {
+    const query = db('task_attachments as a')
       .join('users as u', 'a.uploaded_by', 'u.user_id')
       .select([
         'a.attachment_id',
+        'a.tenant_id',
         'a.task_id',
         'a.uploaded_by',
         'a.file_name',
@@ -70,15 +67,15 @@ export const attachmentModel = {
       ])
       .where('a.task_id', taskId)
       .orderBy('a.created_at', 'desc');
+
+    if (tenantId) query.andWhere('a.tenant_id', tenantId);
+    return query;
   },
 
-  /**
-   * Delete attachment record
-   */
-  async delete(attachmentId) {
-    return db('task_attachments')
-      .where('attachment_id', attachmentId)
-      .delete();
+  async delete(attachmentId, tenantId = null) {
+    const query = db('task_attachments').where('attachment_id', attachmentId);
+    if (tenantId) query.andWhere('tenant_id', tenantId);
+    return query.delete();
   },
 };
 
